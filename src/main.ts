@@ -8,8 +8,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     instrument: ObserveInstrument,
   });
-  
-  // Permitir la conexión desde el frontend
+
+  // Permitir la conexion desde el frontend
   app.enableCors();
 
   app.useGlobalFilters(new PrismaExceptionFilter());
@@ -20,10 +20,11 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
   const config = new DocumentBuilder()
     .setTitle('API para Help Desk Interno')
     .setDescription(
-      'API para la gestión de incidencias y solicitudes de soporte técnico.',
+      'API para la gestion de incidencias y solicitudes de soporte tecnico.',
     )
     .setVersion('1.0')
     .addBearerAuth()
@@ -35,5 +36,5 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-await bootstrap();
 
+await bootstrap();

@@ -106,7 +106,7 @@ export class TicketController {
 
     return this.ticketService.findAll(user.sub, user.role);
   }
-  
+
   @Get('metrics')
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'AGENTE')
@@ -165,8 +165,7 @@ export class TicketController {
   @Patch(':id/status')
   @ApiOperation({
     summary: 'Cambiar estado de un ticket',
-    description:
-      'Permite a un administrador cambiar el estado de cualquier ticket y a un agente cambiar el estado de los tickets que tiene asignados.',
+    description: 'ADMIN puede cambiar el estado de cualquier ticket. AGENTE puede cambiar únicamente los tickets asignados a sí mismo. Transiciones permitidas: ABIERTO → EN_PROCESO o CERRADO; EN_PROCESO → RESUELTO o CERRADO; RESUELTO → CERRADO. CERRADO es un estado final.'
   })
   @ApiParam({
     name: 'id',
@@ -221,13 +220,13 @@ export class TicketController {
       user.role,
     );
   }
-
   @Patch(':id/assign')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'AGENTE')
   @ApiOperation({
     summary: 'Asignar un ticket',
-    description: 'Permite al administrador asignar un ticket a un agente.',
+    description:
+      'ADMIN puede asignar tickets a cualquier AGENTE. AGENTE puede tomar tickets sin asignar o conservar los que ya tiene asignados.',
   })
   @ApiParam({
     name: 'id',
@@ -255,15 +254,25 @@ export class TicketController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Solo un administrador puede asignar tickets.',
+    description: 'No tienes permisos para realizar esta asignación.',
   })
   @ApiResponse({
     status: 404,
     description: 'Ticket o usuario no encontrado.',
   })
-  assign(@Param('id') id: string, @Body() assignTicketDto: AssignTicketDto) {
-    return this.ticketService.assign(+id, assignTicketDto);
+  assign(
+    @Param('id') id: string,
+    @Body() assignTicketDto: AssignTicketDto,
+    @Req() req: Request,
+  ) {
+    const user = req.user as {
+      sub: number;
+      role: string;
+    };
+
+    return this.ticketService.assign(+id, assignTicketDto, user.sub, user.role);
   }
+
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')

@@ -7,7 +7,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateTicketDto } from './dto/create-ticket.dto.js';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto.js';
-import { Role, NotificationType, TicketStatus } from '../generated/prisma/enums.js';
+import {
+  Role,
+  NotificationType,
+  TicketStatus,
+} from '../generated/prisma/enums.js';
 import { AssignTicketDto } from './dto/assign-ticket.dto.js';
 import { NotificationService } from '../notifications/notification.service.js';
 
@@ -40,15 +44,9 @@ export class TicketService {
       },
     });
   }
-
   async findAll(userId: number, userRole: string) {
     return this.prisma.ticket.findMany({
-      where:
-        userRole === 'ADMIN'
-          ? undefined
-          : userRole === 'AGENTE'
-            ? { assignedToId: userId }
-            : { createdById: userId },
+      where: userRole === 'EMPLEADO' ? { createdById: userId } : undefined,
       include: {
         category: true,
         createdBy: {
@@ -213,54 +211,84 @@ export class TicketService {
       message: 'Ticket eliminado correctamente',
     };
   }
-async assign(id: number, assignTicketDto: AssignTicketDto) {
-  const ticket = await this.prisma.ticket.findUnique({
-    where: { id },
-  });
 
-  if (!ticket) {
-    throw new NotFoundException('El ticket no existe');
-  }
+  async assign(
+    id: number,
+    assignTicketDto: AssignTicketDto,
+    userId: number,
+    userRole: string,
+  ) {
+    // Solo ADMIN y AGENTE pueden asignar tickets.
+    if (userRole !== Role.ADMIN && userRole !== Role.AGENTE) {
+      throw new ForbiddenException('No tienes permisos para asignar tickets');
+    }
 
-  const agent = await this.prisma.user.findUnique({
-    where: {
-      id: assignTicketDto.assignedToId,
-    },
-  });
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id },
+    });
 
-  if (!agent || agent.role !== Role.AGENTE) {
-    throw new BadRequestException(
-      'El agente no existe o no tiene el rol adecuado',
-    );
-  }
+    if (!ticket) {
+      throw new NotFoundException('El ticket no existe');
+    }
 
-  const updatedTicket = await this.prisma.ticket.update({
-    where: { id },
-    data: {
-      assignedToId: agent.id,
-    },
-    include: {
-      assignedTo: {
-        select: {
-          id: true,
-          name: true,
-          lastName: true,
-          email: true,
-          role: true,
+    // El AGENTE solo puede asignarse tickets a sí mismo.
+    if (userRole === Role.AGENTE && assignTicketDto.assignedToId !== userId) {
+      throw new ForbiddenException(
+        'Como agente solo puedes asignarte tickets a ti mismo',
+      );
+    }
+
+    // No puede tomar tickets asignados a otro agente.
+    if (
+      userRole === Role.AGENTE &&
+      ticket.assignedToId !== null &&
+      ticket.assignedToId !== userId
+    ) {
+      throw new ForbiddenException(
+        'Este ticket ya está asignado a otro agente',
+      );
+    }
+
+    // El destinatario debe existir y tener rol AGENTE.
+    const agent = await this.prisma.user.findUnique({
+      where: {
+        id: assignTicketDto.assignedToId,
+      },
+    });
+
+    if (!agent || agent.role !== Role.AGENTE) {
+      throw new BadRequestException(
+        'El agente no existe o no tiene el rol adecuado',
+      );
+    }
+
+    const updatedTicket = await this.prisma.ticket.update({
+      where: { id },
+      data: {
+        assignedToId: agent.id,
+      },
+      include: {
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  await this.notificationService.enviar(
-    agent.id,
-    `El ticket #${ticket.id} "${ticket.title}" ha sido asignado a ti.`,
-    NotificationType.TICKET_ASIGNADO,
-    ticket.id,
-  );
+    await this.notificationService.enviar(
+      agent.id,
+      `El ticket #${ticket.id} "${ticket.title}" ha sido asignado a ti.`,
+      NotificationType.TICKET_ASIGNADO,
+      ticket.id,
+    );
 
-  return updatedTicket;
-}
+    return updatedTicket;
+  }
   async getMetrics() {
     const [totalTickets, ticketsByCategory, ticketsByStatus, categories] =
       await Promise.all([

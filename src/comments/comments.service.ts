@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable,
   ForbiddenException,
   NotFoundException,
@@ -60,6 +60,7 @@ export class CommentsService {
         },
       },
     });
+
     const usuarioNotificar = new Set<number>();
     if (ticket.createdById !== userId) {
       usuarioNotificar.add(ticket.createdById);
@@ -77,6 +78,54 @@ export class CommentsService {
       );
     }
     return comment;
+  }
+
+  async update(
+    ticketId: number,
+    id: number,
+    updateCommentDto: UpdateCommentDto,
+    userId: number,
+  ) {
+    const comment = await this.prisma.comment.findFirst({
+      where: {
+        id,
+        ticketId,
+      },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('El comentario no existe');
+    }
+
+    if (comment.userId !== userId) {
+      throw new ForbiddenException(
+        'No tienes permiso para editar este comentario',
+      );
+    }
+
+    return this.prisma.comment.update({
+      where: {
+        id,
+      },
+      data: {
+        content: updateCommentDto.content,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
   }
 
   async findHistorial(ticketId: number, userId: number, role: Role) {
