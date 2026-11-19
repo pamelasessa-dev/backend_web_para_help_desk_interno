@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { hash } from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto.js';
 import { Role } from '../generated/prisma/enums.js';
@@ -24,12 +25,14 @@ export class UsersService {
       );
     }
 
+    const passwordHash = await hash(createUserDto.password, 10);
+
     return this.prisma.user.create({
       data: {
         name: createUserDto.name,
         lastName: createUserDto.lastName,
         email: createUserDto.email,
-        password: createUserDto.password,
+        password: passwordHash,
       },
       select: {
         id: true,

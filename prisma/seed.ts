@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import {
   PrismaClient,
   Role,
@@ -6,7 +8,6 @@ import {
 } from '../src/generated/prisma/client.js';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-
 import bcrypt from 'bcrypt';
 
 const adapter = new PrismaPg({
@@ -16,8 +17,21 @@ const adapter = new PrismaPg({
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  console.log('Iniciando limpieza de la base de datos...');
+
+  // Eliminar datos respetando las relaciones
+  await prisma.notification.deleteMany();
+  await prisma.comment.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.category.deleteMany();
+  await prisma.user.deleteMany();
+
+  console.log('Datos anteriores eliminados correctamente.');
+
+  // Contraseña común para los usuarios de prueba
   const password = await bcrypt.hash('12345678', 10);
 
+  // Crear usuarios
   await prisma.user.createMany({
     data: [
       {
@@ -51,6 +65,9 @@ async function main() {
     ],
   });
 
+  console.log('Usuarios creados.');
+
+  // Crear categorías
   await prisma.category.createMany({
     data: [
       {
@@ -76,48 +93,39 @@ async function main() {
     ],
   });
 
+  console.log('Categorías creadas.');
+
+  // Recuperar usuarios
   const juan = await prisma.user.findUniqueOrThrow({
-    where: {
-      email: 'juan@helpdesk.com',
-    },
+    where: { email: 'juan@helpdesk.com' },
   });
 
   const lucas = await prisma.user.findUniqueOrThrow({
-    where: {
-      email: 'lucas@helpdesk.com',
-    },
+    where: { email: 'lucas@helpdesk.com' },
   });
 
   const maria = await prisma.user.findUniqueOrThrow({
-    where: {
-      email: 'maria@helpdesk.com',
-    },
+    where: { email: 'maria@helpdesk.com' },
   });
 
+  // Recuperar categorías
   const hardware = await prisma.category.findUniqueOrThrow({
-    where: {
-      name: 'Hardware',
-    },
+    where: { name: 'Hardware' },
   });
 
   const software = await prisma.category.findUniqueOrThrow({
-    where: {
-      name: 'Software',
-    },
+    where: { name: 'Software' },
   });
 
   const acceso = await prisma.category.findUniqueOrThrow({
-    where: {
-      name: 'Acceso',
-    },
+    where: { name: 'Acceso' },
   });
 
   const redes = await prisma.category.findUniqueOrThrow({
-    where: {
-      name: 'Redes',
-    },
+    where: { name: 'Redes' },
   });
 
+  // Crear tickets
   const ticketAbierto = await prisma.ticket.create({
     data: {
       title: 'La computadora no enciende',
@@ -169,20 +177,21 @@ async function main() {
     },
   });
 
+  console.log('Tickets creados.');
+
+  // Crear comentarios
   await prisma.comment.createMany({
     data: [
+      // Ticket abierto y pendiente de asignación:
+      // únicamente tiene el comentario inicial del empleado.
       {
         content:
           'El problema comenzó esta mañana y la computadora no muestra ninguna señal de encendido.',
         ticketId: ticketAbierto.id,
         userId: juan.id,
       },
-      {
-        content:
-          'Voy a revisar el equipo y verificar la fuente de alimentación.',
-        ticketId: ticketAbierto.id,
-        userId: lucas.id,
-      },
+
+      // Ticket en proceso, asignado a Lucas.
       {
         content:
           'Estoy revisando el error de inicio de sesión y los registros del sistema.',
@@ -195,6 +204,8 @@ async function main() {
         ticketId: ticketEnProceso.id,
         userId: maria.id,
       },
+
+      // Ticket resuelto, asignado a María.
       {
         content:
           'Se restableció la contraseña y el usuario ya puede ingresar nuevamente.',
@@ -206,6 +217,8 @@ async function main() {
         ticketId: ticketResuelto.id,
         userId: juan.id,
       },
+
+      // Ticket cerrado, asignado a Lucas.
       {
         content:
           'Se reinició el equipo de red y se actualizó la configuración del punto de acceso.',
@@ -220,14 +233,16 @@ async function main() {
       },
     ],
   });
+
+  console.log('Comentarios creados.');
+  console.log('Seed ejecutado correctamente.');
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
+  .catch((error) => {
+    console.error('Error al ejecutar el seed:', error);
+    process.exitCode = 1;
   })
-  .catch(async (error) => {
-    console.error(error);
+  .finally(async () => {
     await prisma.$disconnect();
-    process.exit(1);
   });

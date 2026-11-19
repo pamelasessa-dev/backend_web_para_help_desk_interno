@@ -22,16 +22,8 @@ export class CommentsService {
     userId: number,
     userRole: string,
   ) {
-    const ticket = await this.prisma.ticket.findFirst({
-      where:
-        userRole === 'EMPLEADO'
-          ? {
-              id: ticketId,
-              createdById: userId,
-            }
-          : {
-              id: ticketId,
-            },
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
       select: {
         id: true,
         createdById: true,
@@ -42,6 +34,22 @@ export class CommentsService {
     if (!ticket) {
       throw new NotFoundException('El ticket no existe');
     }
+
+    // El EMPLEADO solo puede comentar en sus propios tickets.
+    if (userRole === 'EMPLEADO' && ticket.createdById !== userId) {
+      throw new ForbiddenException(
+        'No tienes permiso para comentar en este ticket',
+      );
+    }
+
+    // El AGENTE solo puede comentar en tickets asignados a él.
+    if (userRole === 'AGENTE' && ticket.assignedToId !== userId) {
+      throw new ForbiddenException(
+        'No tienes permitido realizar esta acción. Solo puedes comentar en tickets asignados a ti.',
+      );
+    }
+
+    // ADMIN puede comentar en cualquier ticket.
     const comment = await this.prisma.comment.create({
       data: {
         content: createCommentDto.content,
@@ -62,13 +70,15 @@ export class CommentsService {
     });
 
     const usuarioNotificar = new Set<number>();
+
     if (ticket.createdById !== userId) {
       usuarioNotificar.add(ticket.createdById);
     }
+
     if (ticket.assignedToId && ticket.assignedToId !== userId) {
       usuarioNotificar.add(ticket.assignedToId);
     }
-    // Notificar a los usuarios correspondientes
+
     for (const destinatarioId of usuarioNotificar) {
       await this.notificationService.enviar(
         destinatarioId,
@@ -77,6 +87,7 @@ export class CommentsService {
         ticket.id,
       );
     }
+
     return comment;
   }
 
@@ -103,7 +114,7 @@ export class CommentsService {
 
     if (comment.userId !== userId) {
       throw new ForbiddenException(
-        'No tienes permiso para editar este comentario',
+        'No tienes permitido realizar esta acción. Solo puedes editar tus propios comentarios.',
       );
     }
 
@@ -124,6 +135,35 @@ export class CommentsService {
             role: true,
           },
         },
+      },
+    });
+  }
+
+  async remove(ticketId: number, id: number, userId: number) {
+    const comment = await this.prisma.comment.findFirst({
+      where: {
+        id,
+        ticketId,
+      },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('El comentario no existe');
+    }
+
+    if (comment.userId !== userId) {
+      throw new ForbiddenException(
+        'No tienes permitido realizar esta acción. Solo puedes eliminar tus propios comentarios.',
+      );
+    }
+
+    return this.prisma.comment.delete({
+      where: {
+        id: comment.id,
       },
     });
   }
@@ -170,6 +210,7 @@ export class CommentsService {
       },
     });
   }
+
   async findAll(ticketId: number, userId: number, userRole: string) {
     const ticket = await this.prisma.ticket.findFirst({
       where:

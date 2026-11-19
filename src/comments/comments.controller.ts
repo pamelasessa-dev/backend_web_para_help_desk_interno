@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -38,7 +39,14 @@ export class CommentsController {
   @ApiOperation({ summary: 'Crear un comentario' })
   @ApiParam({ name: 'ticketId', example: 1 })
   @ApiBody({ type: CreateCommentDto })
-  @ApiResponse({ status: 201, description: 'Comentario creado correctamente.' })
+  @ApiResponse({
+    status: 201,
+    description: 'Comentario creado correctamente.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No tienes permiso para comentar en este ticket.',
+  })
   create(
     @Param('ticketId', ParseIntPipe) ticketId: number,
     @Body() createCommentDto: CreateCommentDto,
@@ -85,6 +93,32 @@ export class CommentsController {
       updateCommentDto,
       user.sub,
     );
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Eliminar un comentario propio',
+    description: 'Solamente el autor del comentario puede eliminarlo.',
+  })
+  @ApiParam({ name: 'ticketId', example: 1 })
+  @ApiParam({ name: 'id', description: 'ID del comentario', example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: 'Comentario eliminado correctamente.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No puedes eliminar este comentario.',
+  })
+  @ApiResponse({ status: 404, description: 'Comentario no encontrado.' })
+  remove(
+    @Param('ticketId', ParseIntPipe) ticketId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: Request,
+  ) {
+    const user = req.user as { sub: number; role: string };
+
+    return this.commentsService.remove(ticketId, id, user.sub);
   }
 
   @Get('ticket/:ticketId')
